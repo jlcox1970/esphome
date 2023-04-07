@@ -76,7 +76,6 @@ void EthernetComponent::setup() {
       phy = esp_eth_phy_new_jl1101(&phy_config);
       break;
     }
-
     case ETHERNET_TYPE_KSZ8081: {
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
       phy = esp_eth_phy_new_ksz8081(&phy_config);
@@ -194,7 +193,7 @@ void EthernetComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "  MDC Pin: %u", this->mdc_pin_);
   ESP_LOGCONFIG(TAG, "  MDIO Pin: %u", this->mdio_pin_);
   ESP_LOGCONFIG(TAG, "  Type: %s", eth_type);
-  ESP_LOGCONFIG(TAG, "  PHY addr: %i", this->phy_addr_);
+  ESP_LOGCONFIG(TAG, "  PHY addr: %u", this->phy_addr_);
 }
 
 float EthernetComponent::get_setup_priority() const { return setup_priority::WIFI; }

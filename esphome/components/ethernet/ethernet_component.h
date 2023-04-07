@@ -14,7 +14,7 @@ namespace esphome {
 namespace ethernet {
 
 enum EthernetType {
-  UNSET = 0,
+  UNKNOWN = 0,
   ETHERNET_TYPE_LAN8720,
   ETHERNET_TYPE_RTL8201,
   ETHERNET_TYPE_DP83848,
