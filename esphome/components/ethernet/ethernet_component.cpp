@@ -25,6 +25,8 @@ EthernetComponent *global_eth_component;  // NOLINT(cppcoreguidelines-avoid-non-
 EthernetComponent::EthernetComponent() { global_eth_component = this; }
 
 void EthernetComponent::setup() {
+  this->dump_config();
+
   ESP_LOGCONFIG(TAG, "Setting up Ethernet...");
   // Delay here to allow power to stabilise before Ethernet is initialised.
   delay(300);  // NOLINT
@@ -74,6 +76,14 @@ void EthernetComponent::setup() {
       phy = esp_eth_phy_new_jl1101(&phy_config);
       break;
     }
+
+    case ETHERNET_TYPE_KSZ8081: {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
+      phy = esp_eth_phy_new_ksz8081(&phy_config);
+      // esp_eth_phy_new_ksz80xx
+#endif
+      break;
+    }
     default: {
       this->mark_failed();
       return;
@@ -84,6 +94,11 @@ void EthernetComponent::setup() {
   this->eth_handle_ = nullptr;
   err = esp_eth_driver_install(&eth_config, &this->eth_handle_);
   ESPHL_ERROR_CHECK(err, "ETH driver install error");
+
+  if (this->eth_handle_ != nullptr) {
+    this->set_phy_registers_();
+  }
+
   /* attach Ethernet driver to TCP/IP stack */
   err = esp_netif_attach(this->eth_netif_, esp_eth_new_netif_glue(this->eth_handle_));
   ESPHL_ERROR_CHECK(err, "ETH netif attach error");
@@ -140,7 +155,7 @@ void EthernetComponent::loop() {
 }
 
 void EthernetComponent::dump_config() {
-  std::string eth_type;
+  const char *eth_type;
   switch (this->type_) {
     case ETHERNET_TYPE_LAN8720:
       eth_type = "LAN8720";
@@ -158,6 +173,14 @@ void EthernetComponent::dump_config() {
       eth_type = "IP101";
       break;
 
+    case ETHERNET_TYPE_JL1101:
+      eth_type = "JL1101";
+      break;
+
+    case ETHERNET_TYPE_KSZ8081:
+      eth_type = "KSZ8081";
+      break;
+
     default:
       eth_type = "Unknown";
       break;
@@ -170,7 +193,8 @@ void EthernetComponent::dump_config() {
   }
   ESP_LOGCONFIG(TAG, "  MDC Pin: %u", this->mdc_pin_);
   ESP_LOGCONFIG(TAG, "  MDIO Pin: %u", this->mdio_pin_);
-  ESP_LOGCONFIG(TAG, "  Type: %s", eth_type.c_str());
+  ESP_LOGCONFIG(TAG, "  Type: %s", eth_type);
+  ESP_LOGCONFIG(TAG, "  PHY addr: %i", this->phy_addr_);
 }
 
 float EthernetComponent::get_setup_priority() const { return setup_priority::WIFI; }
@@ -202,6 +226,10 @@ void EthernetComponent::eth_event_handler(void *arg, esp_event_base_t event_base
     case ETHERNET_EVENT_DISCONNECTED:
       event_name = "ETH disconnected";
       global_eth_component->connected_ = false;
+      if (global_eth_component->eth_handle_ != nullptr) {
+        // global_eth_component->dump_phy_registers_();
+        // global_eth_component->set_phy_registers_();
+      }
       break;
     default:
       return;
@@ -217,6 +245,9 @@ void EthernetComponent::got_ip_event_handler(void *arg, esp_event_base_t event_b
 }
 
 void EthernetComponent::start_connect_() {
+  this->dump_phy_registers_();
+  this->set_phy_registers_();
+
   this->connect_begin_ = millis();
   this->status_set_warning();
 
@@ -304,23 +335,26 @@ void EthernetComponent::dump_connect_params_() {
   ESP_LOGCONFIG(TAG, "  DNS1: %s", network::IPAddress(dns_ip1->addr).str().c_str());
   ESP_LOGCONFIG(TAG, "  DNS2: %s", network::IPAddress(dns_ip2->addr).str().c_str());
 #endif
+  if (this->eth_handle_ != nullptr) {
+    esp_err_t err;
 
-  esp_err_t err;
+    uint8_t mac[6];
+    err = esp_eth_ioctl(this->eth_handle_, ETH_CMD_G_MAC_ADDR, &mac);
+    ESPHL_ERROR_CHECK(err, "ETH_CMD_G_MAC error");
+    ESP_LOGCONFIG(TAG, "  MAC Address: %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-  uint8_t mac[6];
-  err = esp_eth_ioctl(this->eth_handle_, ETH_CMD_G_MAC_ADDR, &mac);
-  ESPHL_ERROR_CHECK(err, "ETH_CMD_G_MAC error");
-  ESP_LOGCONFIG(TAG, "  MAC Address: %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    eth_duplex_t duplex_mode;
+    err = esp_eth_ioctl(this->eth_handle_, ETH_CMD_G_DUPLEX_MODE, &duplex_mode);
+    ESPHL_ERROR_CHECK(err, "ETH_CMD_G_DUPLEX_MODE error");
+    ESP_LOGCONFIG(TAG, "  Is Full Duplex: %s", YESNO(duplex_mode == ETH_DUPLEX_FULL));
 
-  eth_duplex_t duplex_mode;
-  err = esp_eth_ioctl(this->eth_handle_, ETH_CMD_G_DUPLEX_MODE, &duplex_mode);
-  ESPHL_ERROR_CHECK(err, "ETH_CMD_G_DUPLEX_MODE error");
-  ESP_LOGCONFIG(TAG, "  Is Full Duplex: %s", YESNO(duplex_mode == ETH_DUPLEX_FULL));
+    eth_speed_t speed;
+    err = esp_eth_ioctl(this->eth_handle_, ETH_CMD_G_SPEED, &speed);
+    ESPHL_ERROR_CHECK(err, "ETH_CMD_G_SPEED error");
+    ESP_LOGCONFIG(TAG, "  Link Speed: %u", speed == ETH_SPEED_100M ? 100 : 10);
 
-  eth_speed_t speed;
-  err = esp_eth_ioctl(this->eth_handle_, ETH_CMD_G_SPEED, &speed);
-  ESPHL_ERROR_CHECK(err, "ETH_CMD_G_SPEED error");
-  ESP_LOGCONFIG(TAG, "  Link Speed: %u", speed == ETH_SPEED_100M ? 100 : 10);
+    this->dump_phy_registers_();
+  }
 }
 
 void EthernetComponent::set_phy_addr(uint8_t phy_addr) { this->phy_addr_ = phy_addr; }
@@ -342,6 +376,72 @@ std::string EthernetComponent::get_use_address() const {
 }
 
 void EthernetComponent::set_use_address(const std::string &use_address) { this->use_address_ = use_address; }
+
+#define my_dump_phy_registers(register, name) \
+  { \
+    uint32_t var; \
+    err = eth->phy_reg_read(eth, ksz80xx->addr, (register), &(var)); \
+    ESPHL_ERROR_CHECK(err, "read " name " failed"); \
+    ESP_LOGVV(TAG, name " : %s", format_hex_pretty((u_int8_t *) &var, 2).c_str()); \
+  }
+
+void EthernetComponent::dump_phy_registers_() {
+  esp_err_t err;
+  esp_eth_driver_t *eth_driver = (esp_eth_driver_t *) this->eth_handle_;
+  phy_ksz80xx_t *ksz80xx = __containerof(eth_driver->phy, phy_ksz80xx_t, parent);
+  esp_eth_mediator_t *eth = ksz80xx->eth;
+
+  my_dump_phy_registers(0x00, "Basic Control 0h                        ");
+  my_dump_phy_registers(0x01, "Basic Status 1h                         ");
+  my_dump_phy_registers(0x05, "Auto-Negotiation Link Partner Ability 5h");
+  my_dump_phy_registers(0x06, "Auto-Negotiation Expansion 6h           ");
+  my_dump_phy_registers(0x07, "Auto-Negotiation Next Page 7h           ");
+  my_dump_phy_registers(0x08, "Link Partner Next Page Ability 8h       ");
+  my_dump_phy_registers(0x1B, "Interrupt Control/Status 1Bh            ");
+  my_dump_phy_registers(0x1D, "LinkMD Control/Status 1Dh               ");
+  my_dump_phy_registers(0x1E, "PHY Control 1 1Eh                       ");
+  my_dump_phy_registers(0x1F, "PHY Control 2 1Fh                       ");
+}
+
+void EthernetComponent::set_phy_registers_() {
+  esp_err_t err;
+  esp_eth_driver_t *eth_driver = (esp_eth_driver_t *) this->eth_handle_;
+  phy_ksz80xx_t *ksz80xx = __containerof(eth_driver->phy, phy_ksz80xx_t, parent);
+  esp_eth_mediator_t *eth = ksz80xx->eth;
+
+  uint32_t basic_control;
+  err = eth->phy_reg_read(eth, ksz80xx->addr, (0x00), &(basic_control));
+  ESPHL_ERROR_CHECK(err, "read Basic Control failed");
+  ESP_LOGVV(TAG, "Basic Control: %s", format_hex_pretty((u_int8_t *) &basic_control, 2).c_str());
+
+  // auto                - 0x3100
+  // 100mbit full duplex - 0x2100
+  // 100mbit half duplex - 0x2000
+  //  10mbit full duplex - 0x0100
+  //  10mbit half duplex - 0x0
+  // if (basic_control != 0x0100) {
+  //   basic_control = 0x0100;
+  //   err = eth->phy_reg_write(eth, ksz80xx->addr, (0x00), basic_control);
+  //   ESPHL_ERROR_CHECK(err, "write Basic Control failed");
+  //   err = eth->phy_reg_read(eth, ksz80xx->addr, (0x00), &(basic_control));
+  //   ESPHL_ERROR_CHECK(err, "read Basic Control failed");
+  //   ESP_LOGVV(TAG, "Basic Control: %s", format_hex_pretty((u_int8_t *) &basic_control, 2).c_str());
+  // }
+
+  uint32_t phy_control_2;
+  err = eth->phy_reg_read(eth, ksz80xx->addr, (0x1F), &(phy_control_2));
+  ESPHL_ERROR_CHECK(err, "read PHY Control 2 failed");
+  ESP_LOGVV(TAG, "PHY Control 2: %s", format_hex_pretty((u_int8_t *) &phy_control_2, 2).c_str());
+
+  if ((phy_control_2 & (1 << 7)) != (1 << 7)) {
+    phy_control_2 |= 1 << 7;
+    err = eth->phy_reg_write(eth, ksz80xx->addr, (0x1F), phy_control_2);
+    ESPHL_ERROR_CHECK(err, "write PHY Control 2 failed");
+    err = eth->phy_reg_read(eth, ksz80xx->addr, (0x1F), &(phy_control_2));
+    ESPHL_ERROR_CHECK(err, "read PHY Control 2 failed");
+    ESP_LOGVV(TAG, "PHY Control 2: %s", format_hex_pretty((u_int8_t *) &phy_control_2, 2).c_str());
+  }
+}
 
 }  // namespace ethernet
 }  // namespace esphome

@@ -14,11 +14,13 @@ namespace esphome {
 namespace ethernet {
 
 enum EthernetType {
-  ETHERNET_TYPE_LAN8720 = 0,
+  UNSET = 0,
+  ETHERNET_TYPE_LAN8720,
   ETHERNET_TYPE_RTL8201,
   ETHERNET_TYPE_DP83848,
   ETHERNET_TYPE_IP101,
   ETHERNET_TYPE_JL1101,
+  ETHERNET_TYPE_KSZ8081,
 };
 
 struct ManualIP {
@@ -34,6 +36,28 @@ enum class EthernetComponentState {
   CONNECTING,
   CONNECTED,
 };
+
+typedef struct {
+    esp_eth_mediator_t mediator;
+    esp_eth_phy_t *phy;
+    esp_eth_mac_t *mac;
+    esp_timer_handle_t check_link_timer;
+    uint32_t check_link_period_ms;
+    eth_speed_t speed;
+    eth_duplex_t duplex;
+    eth_link_t link;
+} esp_eth_driver_t;
+
+typedef struct {
+    esp_eth_phy_t parent;
+    esp_eth_mediator_t *eth;
+    int addr;
+    uint32_t reset_timeout_ms;
+    uint32_t autonego_timeout_ms;
+    eth_link_t link_status;
+    int reset_gpio_num;
+    int vendor_model;
+} phy_ksz80xx_t;
 
 class EthernetComponent : public Component {
  public:
@@ -63,6 +87,8 @@ class EthernetComponent : public Component {
 
   void start_connect_();
   void dump_connect_params_();
+  void dump_phy_registers_();
+  void set_phy_registers_();
 
   std::string use_address_;
   uint8_t phy_addr_{0};
@@ -79,7 +105,7 @@ class EthernetComponent : public Component {
   EthernetComponentState state_{EthernetComponentState::STOPPED};
   uint32_t connect_begin_;
   esp_netif_t *eth_netif_{nullptr};
-  esp_eth_handle_t eth_handle_;
+  esp_eth_handle_t eth_handle_{nullptr};
 };
 
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
