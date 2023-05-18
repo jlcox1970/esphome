@@ -209,7 +209,7 @@ void Logger::pre_setup() {
         this->hw_serial_ = &USBSerial;
         USBSerial.begin(this->baud_rate_);
         break;
-#endif // USE_ESP32 && (USE_ESP32_VARIANT_ESP32S2 || USE_ESP32_VARIANT_ESP32S3)
+#endif  // USE_ESP32 && (USE_ESP32_VARIANT_ESP32S2 || USE_ESP32_VARIANT_ESP32S3)
     }
 #endif  // USE_ARDUINO
 #ifdef USE_ESP_IDF
