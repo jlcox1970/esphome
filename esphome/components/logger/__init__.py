@@ -78,7 +78,7 @@ UART_SELECTION_ESP32 = {
 
 UART_SELECTION_ESP8266 = [UART0, UART0_SWAP, UART1]
 
-ESP_IDF_UARTS = [USB_CDC, USB_SERIAL_JTAG]
+ESP_IDF_UARTS = [USB_SERIAL_JTAG]
 
 UART_SELECTION_RP2040 = [USB_CDC, UART0, UART1]
 
@@ -143,6 +143,8 @@ CONFIG_SCHEMA = cv.All(
                 CONF_HARDWARE_UART,
                 esp8266=UART0,
                 esp32=UART0,
+                esp32_s2=USB_CDC,
+                esp32_s3=USB_CDC,
                 rp2040=USB_CDC,
             ): cv.All(
                 cv.only_on([PLATFORM_ESP8266, PLATFORM_ESP32, PLATFORM_RP2040]),

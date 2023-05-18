@@ -203,7 +203,13 @@ void Logger::pre_setup() {
         this->hw_serial_ = &Serial;
         Serial.begin(this->baud_rate_);
         break;
-#endif
+#endif  // USE_RP2040
+#if defined(USE_ESP32) && (defined(USE_ESP32_VARIANT_ESP32S2) || defined(USE_ESP32_VARIANT_ESP32S3))
+      case UART_SELECTION_USB_CDC:
+        this->hw_serial_ = &USBSerial;
+        USBSerial.begin(this->baud_rate_);
+        break;
+#endif // USE_ESP32 && (USE_ESP32_VARIANT_ESP32S2 || USE_ESP32_VARIANT_ESP32S3)
     }
 #endif  // USE_ARDUINO
 #ifdef USE_ESP_IDF
@@ -281,10 +287,10 @@ const char *const UART_SELECTIONS[] = {
 #if !defined(USE_ESP32_VARIANT_ESP32C3) && !defined(USE_ESP32_VARIANT_ESP32S2) && !defined(USE_ESP32_VARIANT_ESP32S3)
     "UART2",
 #endif  // !USE_ESP32_VARIANT_ESP32C3 && !USE_ESP32_VARIANT_ESP32S2 && !USE_ESP32_VARIANT_ESP32S3
-#if defined(USE_ESP_IDF)
 #if defined(USE_ESP32_VARIANT_ESP32S2) || defined(USE_ESP32_VARIANT_ESP32S3)
     "USB_CDC",
 #endif  // USE_ESP32_VARIANT_ESP32S2 || USE_ESP32_VARIANT_ESP32S3
+#if defined(USE_ESP_IDF)
 #if defined(USE_ESP32_VARIANT_ESP32C3) || defined(USE_ESP32_VARIANT_ESP32S3)
     "USB_SERIAL_JTAG",
 #endif  // USE_ESP32_VARIANT_ESP32C3 || USE_ESP32_VARIANT_ESP32S3
