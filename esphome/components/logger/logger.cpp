@@ -220,7 +220,7 @@ void Logger::pre_setup() {
         this->hw_serial_ = &USBSerial;
         USBSerial.begin(this->baud_rate_);
 #endif  // ARDUINO_USB_CDC_ON_BOOT
-        USB.begin();
+        // USB.begin();
 #endif  // USE_ESP32_VARIANT_ESP32S2 || USE_ESP32_VARIANT_ESP32S3
         break;
 #endif  // USE_ESP32 && (USE_ESP32_VARIANT_ESP32S2 || USE_ESP32_VARIANT_ESP32S3 || USE_ESP32_VARIANT_ESP32C3)
